@@ -1,0 +1,26 @@
+Performing C SOURCE FILE Test MUDFLAP_AVAILABLE failed with the following output:
+Change Dir: D:/msys64/home/NT/hatari-ntxc/out/build/x64-Debug/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:\VS\IDE\COMMON7\IDE\COMMONEXTENSIONS\MICROSOFT\CMAKE\Ninja\ninja.exe cmTC_fbf1a && [1/2] Building C object CMakeFiles\cmTC_fbf1a.dir\src.c.obj
+cl : Command line warning D9002 : ignoring unknown option '-fmudflapth'
+[2/2] Linking C executable cmTC_fbf1a.exe
+FAILED: cmTC_fbf1a.exe 
+cmd.exe /C "cd . && C:\vs\ide\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe -E vs_link_exe --intdir=CMakeFiles\cmTC_fbf1a.dir --rc=C:\WINDOW~1\10\bin\100183~1.0\x64\rc.exe --mt=C:\WINDOW~1\10\bin\100183~1.0\x64\mt.exe --manifests  -- C:\vs\ide\VC\Tools\MSVC\14.24.28314\bin\Hostx64\x64\link.exe /nologo CMakeFiles\cmTC_fbf1a.dir\src.c.obj  /out:cmTC_fbf1a.exe /implib:cmTC_fbf1a.lib /pdb:cmTC_fbf1a.pdb /version:0.0  /machine:x64  /debug /INCREMENTAL /subsystem:console  mudflap.lib kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib && cd ."
+LINK Pass 1: command "C:\vs\ide\VC\Tools\MSVC\14.24.28314\bin\Hostx64\x64\link.exe /nologo CMakeFiles\cmTC_fbf1a.dir\src.c.obj /out:cmTC_fbf1a.exe /implib:cmTC_fbf1a.lib /pdb:cmTC_fbf1a.pdb /version:0.0 /machine:x64 /debug /INCREMENTAL /subsystem:console mudflap.lib kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTFILE:CMakeFiles\cmTC_fbf1a.dir/intermediate.manifest CMakeFiles\cmTC_fbf1a.dir/manifest.res" failed (exit code 1104) with the following output:
+LINK : fatal error LNK1104: cannot open file 'mudflap.lib'
+ninja: build stopped: subcommand failed.
+
+
+Source file was:
+int main(void) { return 0; }
+Determining if the include file pthread.h exists failed with the following output:
+Change Dir: D:/msys64/home/NT/hatari-ntxc/out/build/x64-Debug/CMakeFiles/CMakeTmp
+
+Run Build Command(s):C:\VS\IDE\COMMON7\IDE\COMMONEXTENSIONS\MICROSOFT\CMAKE\Ninja\ninja.exe cmTC_c5595 && [1/2] Building C object CMakeFiles\cmTC_c5595.dir\CheckIncludeFile.c.obj
+FAILED: CMakeFiles/cmTC_c5595.dir/CheckIncludeFile.c.obj 
+C:\vs\ide\VC\Tools\MSVC\14.24.28314\bin\HostX64\x64\cl.exe  /nologo   /DWIN32 /D_WINDOWS /W3  /MDd /Zi /Ob0 /Od /RTC1 /showIncludes /FoCMakeFiles\cmTC_c5595.dir\CheckIncludeFile.c.obj /FdCMakeFiles\cmTC_c5595.dir\ /FS -c CheckIncludeFile.c
+CheckIncludeFile.c(1): fatal error C1083: Cannot open include file: 'pthread.h': No such file or directory
+ninja: build stopped: subcommand failed.
+
+
+

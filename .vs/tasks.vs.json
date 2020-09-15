@@ -1,0 +1,37 @@
+{
+  "version": "0.2.1",
+
+  "tasks": [
+    {
+      "taskLabel": "gcc make",
+      "appliesTo": "Makefile.libretro",
+      "type": "launch",
+      "contextType": "custom",
+      "inheritEnvironments": [
+        "Mingw64"
+      ],
+      "command": "make",
+      "args": [
+        "-f",
+        "Makefile.libretro",
+        "EXTERNAL_ZLIB=1"
+      ]
+    },
+    {
+      "taskLabel": "gcc make clean",
+      "appliesTo": "Makefile.libretro",
+      "type": "launch",
+      "contextType": "custom",
+      "inheritEnvironments": [
+        "Mingw64"
+      ],
+      "command": "make",
+      "args": [
+        "clean",
+        "-f",
+        "Makefile.libretro",
+        "EXTERNAL_ZLIB=1"
+      ]
+    }
+  ]
+}
