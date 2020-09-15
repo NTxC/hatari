@@ -1,0 +1,41 @@
+{
+  "configurations": [
+    {
+      "inheritEnvironments": [
+        "mingw_64"
+      ],
+      "name": "Mingw64",
+      "includePath": [
+        "${env.INCLUDE}",
+        "${workspaceRoot}\\**",
+        "${workspaceRoot}\\src",
+        "${workspaceRoot}\\src\\uae-cpu",
+        "${workspaceRoot}\\src\\falcon",
+        "${workspaceRoot}\\src\\includes",
+        "${workspaceRoot}\\src\\debug",
+        "${workspaceRoot}\\libretro",
+        "${workspaceRoot}\\libretro\\libretro-sdk\\include",
+        "${workspaceRoot}\\libretro\\include",
+        "${workspaceRoot}\\libretro\\utils",
+        "${workspaceRoot}\\libretro\\uae-cpu-pregen"
+      ],
+      "intelliSenseMode": "windows-clang-x64",
+      "environments": [
+        {
+          "MINGW_PREFIX": "D:/msys64/mingw64",
+          "MINGW_CHOST ": "x86_64-w64-mingw32",
+          "MINGW_PACKAGE_PREFIX": "mingw-w64-x86_64",
+          "MSYSTEM": "MINGW64",
+          "MSYSTEM_CARCH": "x64_64",
+          "MSYSTEM_PREFIX": "${env.MINGW_PREFIX}",
+          "SHELL": "${env.MINGW_PREFIX}/../usr/bin/bash",
+          "TEMP": "${env.MINGW_PREFIX}/../tmp",
+          "TMP": "${env.TEMP}",
+          "PATH": "${env.MINGW_PREFIX}/bin;${env.MINGW_PREFIX}/../usr/local/bin;${env.MINGW_PREFIX}/../usr/bin;${env.PATH}",
+          "INCLUDE": "project/lib/include;${env.MINGW_PREFIX}/mingw/include;${env.MINGW_PREFIX}/lib/gcc/x86_64-w64-mingw32/10.2.0/../../../../include/c++/10.2.0;${env.MINGW_PREFIX}/lib/gcc/x86_64-w64-mingw32/10.2.0/../../../../include/c++/10.2.0/x86_64-w64-mingw32;${env.MINGW_PREFIX}/lib/gcc/x86_64-w64-mingw32/10.2.0/../../../../include/c++/10.2.0/backward;${env.MINGW_PREFIX}/lib/gcc/x86_64-w64-mingw32/10.2.0/include;${env.MINGW_PREFIX}/lib/gcc/x86_64-w64-mingw32/10.2.0/../../../../include;${env.MINGW_PREFIX}/lib/gcc/x86_64-w64-mingw32/10.2.0/include-fixed;${env.MINGW_PREFIX}/lib/gcc/x86_64-w64-mingw32/10.2.0/../../../../x86_64-w64-mingw32/include"
+        }
+      ]
+    }
+  ]
+}
+

@@ -3,3 +3,5 @@
 *.dll
 *.bc
 *.a
+/.vs/hatari-ntxc/v16/ipch/AutoPCH
+/.vs/hatari-ntxc/v16
