@@ -1,6 +1,10 @@
 {
   "ExpandedNodes": [
-    ""
+    "",
+    "\\src",
+    "\\src\\includes",
+    "\\Visual.Studio"
   ],
+  "SelectedNode": "\\Makefile.libretro",
   "PreviewInSolutionExplorer": false
 }

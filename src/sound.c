@@ -1185,7 +1185,9 @@ void	Sound_WriteReg( int reg , Uint8 data )
 	}
 }
 
-
+#ifdef DRIVESOUND
+int NT_DriveSound_Init();
+#endif
 
 /*-----------------------------------------------------------------------*/
 /**
@@ -1196,6 +1198,10 @@ void Sound_Init(void)
 {
 	/* Build volume/env tables, ... */
 	Ym2149_Init();
+
+#ifdef DRIVESOUND
+	NT_DriveSound_Init();
+#endif
 
 	Sound_Reset();
 }

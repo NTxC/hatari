@@ -2994,6 +2994,7 @@ void Video_StartInterrupts ( int PendingCyclesOver )
 	CycInt_AddRelativeInterrupt(CyclesPerVBL - PendingCyclesOver, INT_CPU_CYCLE, INTERRUPT_VIDEO_VBL);
 }
 
+#include <dsound.h>
 
 /*-----------------------------------------------------------------------*/
 /**

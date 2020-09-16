@@ -39,6 +39,20 @@ const char FDC_fileid[] = "Hatari fdc.c : " __DATE__ " " __TIME__;
 #include "utils.h"
 #include "statusbar.h"
 
+#ifdef DRIVESOUND
+
+#include "sound_wav.h" //struct TWavFileFormat
+#include <dsound.h>
+
+enum EDriveSound { START, MOTOR, STEP, SEEK, SEEK_FWD, SEEK_BACK, NSOUNDS };    // NT: seek fwd/back
+
+#ifdef WIN32
+IDirectSoundBuffer* Sound_Buffer[2][NSOUNDS];
+#endif
+
+int Sound_Volume;
+
+#endif
 
 /*
   Floppy Disk Controller
@@ -512,6 +526,9 @@ typedef struct {
 	Uint8		NumberOfHeads;				/* 1 for single sided drive, 2 for double sided */
 
 	Uint64		IndexPulse_Time;			/* CyclesGlobalClockCounter value last time we had an index pulse with motor ON */
+#ifdef DRIVESOUND
+	int		DriveSoundVolume;		/* NT: Drive sound volume */
+#endif
 } FDC_DRIVE_STRUCT;
 
 
@@ -833,6 +850,9 @@ static void FDC_CRC16 ( Uint8 *buf , int nb , Uint16 *pCRC )
 void FDC_Init ( void )
 {
 	int	i;
+#ifdef DRIVESOUND
+	int j = 0;
+#endif
 
         LOG_TRACE ( TRACE_FDC , "fdc init\n" );
 
@@ -845,11 +865,16 @@ void FDC_Init ( void )
 		FDC_DRIVES[ i ].HeadTrack = 0;			/* Set all drives to track 0 */
 		FDC_DRIVES[ i ].NumberOfHeads = 2;		/* Double sided drive */
 		FDC_DRIVES[ i ].IndexPulse_Time = 0;
+#ifdef DRIVESOUND
+		FDC_DRIVES[ i ].DriveSoundVolume = 5000;	/* NT: Set initial drive sound volume */
+#endif
 	}
 
 	FDC_Buffer_Reset();
 
 	FDC.EmulationMode = FDC_EMULATION_MODE_INTERNAL;
+
+
 }
 
 
@@ -1923,6 +1948,259 @@ static bool FDC_VerifyTrack ( void )
 	return true;
 }
 
+#ifdef DRIVESOUND
+
+#include "sound_wav.h"
+
+IDirectSound* DSObj = NULL;
+DSCAPS SoundCaps;
+
+char* drive_sound_wav_files[NSOUNDS] = { "D:\\temp\\drivesound\\drive_startup.wav",
+								"D:\\temp\\drivesound\\drive_spin.wav",
+								"D:\\temp\\drivesound\\drive_click.wav",
+								"D:\\temp\\drivesound\\drive_seek.wav",
+								"D:\\temp\\drivesound\\drive_seek_fwd.wav",
+								"D:\\temp\\drivesound\\drive_seek_back.wav" };   // NT: seek fwd/back
+
+GUID SoundDeviceGuid;
+int SoundDeviceGuidSet = 0;
+static int SoundDeviceGuidCounter = 0;
+
+BOOL CALLBACK NT_DSEnumProc(LPGUID Guid, LPCSTR Desc, LPCSTR Mod, LPVOID kek) {
+	//DBG_LOG(Str("SOUND: Found device ") + Desc);
+	//TRACE("add %s %d\n",Desc,Guid);
+
+	///FILE* logfile; ///logfile = fopen("d:\\temp\\drivesound\\log.txt", "a");
+	///fprintf(logfile, "dsdevice: %s\n", Desc);
+	///fclose(logfile);
+
+	if (!SoundDeviceGuidSet && SoundDeviceGuidCounter == 1) {
+		///logfile = fopen("d:\\temp\\drivesound\\log.txt", "a");
+		///fprintf(logfile, "dsenum before guid 0x%08X\n", Guid);
+		///fclose(logfile);
+		//memcpy(&SoundDeviceGuid, Guid, sizeof(GUID));
+		if (!Guid) {
+			///logfile = fopen("d:\\temp\\drivesound\\log.txt", "a");
+			///fprintf(logfile, "dsenum guid empty, default device\n");
+			///fclose(logfile);
+		}
+		else {
+			SoundDeviceGuid.Data1 = Guid->Data1;
+			SoundDeviceGuid.Data2 = Guid->Data2;
+			SoundDeviceGuid.Data3 = Guid->Data3;
+			strncpy(SoundDeviceGuid.Data4, Guid->Data4, 8);
+		}
+		///logfile = fopen("d:\\temp\\drivesound\\log.txt", "a");
+		///fprintf(logfile, "dsenum after guid\n");
+		///fclose(logfile);
+		SoundDeviceGuidSet = 1;
+	}
+
+	///logfile = fopen("d:\\temp\\drivesound\\log.txt", "a");
+	///fprintf(logfile, "dsenum out\n");
+	///fclose(logfile);
+	SoundDeviceGuidCounter++;
+	//DSDriverModuleList.Add((char*)Desc, (LONG_PTR)Guid);
+	return TRUE;
+}
+
+BYTE sound_num_channels = 2;
+BYTE sound_num_bits = 16;
+BYTE sound_bytes_per_sample = 4; //(sound_num_bits/8)*sound_num_channels
+#define DEFAULT_SOUND_BUFFER_LENGTH (32768*1)
+int psg_buf_length = DEFAULT_SOUND_BUFFER_LENGTH;
+
+int NT_DriveSound_Init(void)
+{
+	HRESULT result;
+	int i, j;
+
+
+	/* NT: Clear drive sound buffers */
+	for (i = 0; i < 2; i++) {
+		for (j = 0; j < NSOUNDS; j++) {
+			Sound_Buffer[i][j] = NULL;
+		}
+	}
+
+	memset(&SoundDeviceGuid, 0, sizeof(SoundDeviceGuid));
+	SoundDeviceGuidSet = 0;
+
+	if (DSObj != NULL)
+	{
+		//DSReleaseAllBuffers();
+		DSObj->lpVtbl->Release(DSObj);
+		DSObj = NULL;
+	}
+
+	///FILE* logfile; ///logfile = fopen("d:\\temp\\drivesound\\log.txt", "a");
+	///fprintf(logfile, "ds init 2 0x%08X\n", DSObj);
+	///fclose(logfile);
+
+	result = DirectSoundEnumerate(NT_DSEnumProc, "moo");
+
+	///logfile = fopen("d:\\temp\\drivesound\\log.txt", "a");
+	///fprintf(logfile, "ds init xxx 0x%08X\n", result);
+	///fclose(logfile);
+	if (!SoundDeviceGuidSet) {
+		///logfile = fopen("d:\\temp\\drivesound\\log.txt", "a");
+		///fprintf(logfile, "ds enum fail 0x%08X\n", result);
+		///fclose(logfile);
+		return -1;
+	}
+
+	///logfile = fopen("d:\\temp\\drivesound\\log.txt", "a");
+	///fprintf(logfile, "ds init 3 0x%08X\n", DSObj);
+	///fclose(logfile);
+
+	result = DirectSoundCreate(&SoundDeviceGuid, &DSObj, NULL);
+	if (!DSObj) {
+		SoundDeviceGuidSet = 0;
+		///logfile = fopen("d:\\temp\\drivesound\\log.txt", "a");
+		///fprintf(logfile, "ds create fail 0x%08X\n", result);
+		///fclose(logfile);
+		return -2;
+	}
+
+	DSObj->lpVtbl->Initialize(DSObj, &SoundDeviceGuid);	
+
+	DSObj->lpVtbl->SetCooperativeLevel(DSObj, GetForegroundWindow(), DSSCL_NORMAL);
+
+	///logfile = fopen("d:\\temp\\drivesound\\log.txt", "a");
+	///fprintf(logfile, "ds dsobj init OK\n");
+	///fclose(logfile);
+
+	HRESULT Ret;
+	DSBUFFERDESC dsbd;
+	WAVEFORMATEX wfx;
+	wfx.wFormatTag = WAVE_FORMAT_PCM;
+	wfx.nChannels = sound_num_channels;
+	wfx.nSamplesPerSec = (DWORD)44100;
+	wfx.wBitsPerSample = sound_num_bits;
+	wfx.nBlockAlign = (WORD)sound_bytes_per_sample;
+	wfx.nAvgBytesPerSec = wfx.nSamplesPerSec * wfx.nBlockAlign;
+	wfx.cbSize = 0;
+	memset(&dsbd, 0, sizeof(DSBUFFERDESC));
+	dsbd.dwSize = sizeof(DSBUFFERDESC);
+	dsbd.dwFlags = DSBCAPS_CTRLVOLUME | DSBCAPS_GLOBALFOCUS
+		| DSBCAPS_GETCURRENTPOSITION2 | DSBCAPS_STICKYFOCUS;
+	dsbd.dwBufferBytes = psg_buf_length * sound_bytes_per_sample;
+	dsbd.lpwfxFormat = &wfx;
+
+	NT_DriveSound_LoadSamples(0, DSObj, &dsbd, &wfx);
+	NT_DriveSound_LoadSamples(1, DSObj, &dsbd, &wfx);
+
+	///logfile = fopen("d:\\temp\\drivesound\\log.txt", "a");
+	///fprintf(logfile, "ds init finished\n");
+	///fclose(logfile);
+
+	return 0;
+}
+
+int NT_DriveSound_LoadSamples(int driveId, IDirectSound* DSObj, DSBUFFERDESC* dsbd, WAVEFORMATEX* wfx)
+{
+	/*  Called from sound.cpp's DSCreateSoundBuf(), on each run().
+		We load each sample in its own secondary buffer, each time, which doesn't
+		seem optimal, but saves memory.
+	*/
+	//ASSERT(Id<2);
+	///FILE* logfile;
+	int z = 0;
+	for (z = 0; z < NSOUNDS; z++) {
+
+		HRESULT Ret;
+		struct TWavFileFormat WavFileFormat;
+		FILE* fp;
+		fp = fopen(drive_sound_wav_files[z]/* "D:\\temp\\drivesound\\drive_spin.wav"*/, "rb");
+		if (fp) {
+			fread(&WavFileFormat, sizeof(struct TWavFileFormat), 1, fp);
+
+			wfx->nChannels = WavFileFormat.nChannels;
+			wfx->nSamplesPerSec = WavFileFormat.nSamplesPerSec;
+			wfx->wBitsPerSample = WavFileFormat.wBitsPerSample;
+			wfx->nBlockAlign = wfx->nChannels * wfx->wBitsPerSample / 8;
+			wfx->nAvgBytesPerSec = WavFileFormat.nAvgBytesPerSec;
+			dsbd->dwFlags |= DSBCAPS_STATIC;
+			dsbd->dwBufferBytes = WavFileFormat.length;
+
+			Ret = DSObj->lpVtbl->CreateSoundBuffer(DSObj, dsbd, &Sound_Buffer[driveId][z], NULL);
+			if (Ret == DS_OK) {
+				LPVOID lpvAudioPtr1;
+				DWORD dwAudioBytes1;
+
+				Ret = Sound_Buffer[driveId][z]->lpVtbl->Lock(Sound_Buffer[driveId][z],
+					0, 0, &lpvAudioPtr1, &dwAudioBytes1, NULL, 0,
+					DSBLOCK_ENTIREBUFFER);
+
+				if (Ret == DS_OK) {
+					fread(lpvAudioPtr1, 1, dwAudioBytes1, fp);
+				}
+				else {
+					return -2;
+				}
+
+				Ret = Sound_Buffer[driveId][z]->lpVtbl->Unlock(Sound_Buffer[driveId][z],
+					lpvAudioPtr1, dwAudioBytes1, NULL, 0);
+
+				Ret = Sound_Buffer[driveId][z]->lpVtbl->SetVolume(Sound_Buffer[driveId][z],
+					10000);
+
+				///logfile = fopen("d:\\temp\\drivesound\\log.txt", "a");
+				///fprintf(logfile, "ds loadsample %s ok\n", drive_sound_wav_files[z] );
+				///fclose(logfile);
+			}
+
+		}
+	}
+
+	///logfile = fopen("d:\\temp\\drivesound\\log.txt", "a");
+	///fprintf(logfile, "ds loadsamples done\n");
+	///fclose(logfile);
+
+	return 0;
+
+	/* EasyStr path = DriveSoundDir[Id] + SLASH;
+	EasyStr pathplusfile;
+	for (int i = 0; i < NSOUNDS; i++)
+	{
+		pathplusfile = path;
+		pathplusfile += drive_sound_wav_files[i];
+		fp = fopen(pathplusfile.Text, "rb");
+		if (fp)
+		{
+			fread(&WavFileFormat, sizeof(TWavFileFormat), 1, fp);
+  
+			wfx->nChannels = WavFileFormat.nChannels;
+			wfx->nSamplesPerSec = WavFileFormat.nSamplesPerSec;
+			wfx->wBitsPerSample = WavFileFormat.wBitsPerSample;
+			wfx->nBlockAlign = wfx->nChannels * wfx->wBitsPerSample / 8;
+			wfx->nAvgBytesPerSec = WavFileFormat.nAvgBytesPerSec;
+			dsbd->dwFlags |= DSBCAPS_STATIC;
+			dsbd->dwBufferBytes = WavFileFormat.length;
+			Ret = DSObj->CreateSoundBuffer(dsbd, &Sound_Buffer[Id][i], NULL);
+			if (Ret == DS_OK)
+			{
+				LPVOID lpvAudioPtr1;
+				DWORD dwAudioBytes1;
+				Ret = Sound_Buffer[Id][i]->Lock(0, 0, &lpvAudioPtr1, &dwAudioBytes1, NULL, 0,
+					DSBLOCK_ENTIREBUFFER);
+				if (Ret == DS_OK)
+					fread(lpvAudioPtr1, 1, dwAudioBytes1, fp);
+				Ret = Sound_Buffer[Id][i]->Unlock(lpvAudioPtr1, dwAudioBytes1, NULL, 0);
+			}
+#endif
+
+			fclose(fp);
+		}
+//#ifdef SSE_DEBUG
+		//else TRACE_LOG("DriveSound. Can't load sample file %s\n", pathplusfile.Text);
+//#endif
+	}//nxt
+	//Sound_ChangeVolume();
+	*/
+}
+
+#endif
 
 /*-----------------------------------------------------------------------*/
 /**
@@ -1935,12 +2213,41 @@ static int FDC_UpdateMotorStop ( void )
 	int	FdcCycles = 0;
 	int	FrameCycles, HblCounterVideo, LineCycles;
 
+
 	/* Which command is running? */
 	switch (FDC.CommandState)
 	{
 	 case FDCEMU_RUN_MOTOR_STOP:
 		FDC.IndexPulse_Counter = 0;
 		FDC.CommandState = FDCEMU_RUN_MOTOR_STOP_WAIT;
+
+#ifdef DRIVESOUND
+		/* NT: stop the drive motor sound */
+		DWORD dwStatus;
+
+		///FILE *///logfile = fopen("d:\\temp\\drivesound\\log.txt", "a");
+		///fprintf(logfile, "motor %i sample 0x%08X\n", FDC.DriveSelSignal, Sound_Buffer[FDC.DriveSelSignal][MOTOR]);
+		///fclose(logfile);
+
+		if (Sound_Buffer[FDC.DriveSelSignal][MOTOR])
+		{
+			Sound_Buffer[FDC.DriveSelSignal][MOTOR]->lpVtbl->GetStatus(
+				Sound_Buffer[FDC.DriveSelSignal][MOTOR], &dwStatus);
+
+			///logfile = fopen("d:\\temp\\drivesound\\log.txt", "a");
+			///fprintf(logfile, "motor %i sample dwstatus 0x%08X\n", FDC.DriveSelSignal, dwStatus);
+			///fclose(logfile);
+
+			if (dwStatus & DSBSTATUS_PLAYING) {
+				HRESULT Res = Sound_Buffer[FDC.DriveSelSignal][MOTOR]->lpVtbl->Stop(Sound_Buffer[FDC.DriveSelSignal][MOTOR]);
+
+				///logfile = fopen("d:\\temp\\drivesound\\log.txt", "a");
+				///fprintf(logfile, "motor sample stop 0x%08X\n", Res);
+				///fclose(logfile);
+			}
+		}
+#endif
+
 	 case FDCEMU_RUN_MOTOR_STOP_WAIT:
 		if ( FDC.IndexPulse_Counter < FDC_DELAY_IP_MOTOR_OFF )
 		{
@@ -1960,6 +2267,7 @@ static int FDC_UpdateMotorStop ( void )
 		FDC_Update_STR ( FDC_STR_BIT_MOTOR_ON , 0 );		/* Unset motor bit and keep spin up bit */
 		FDC.Command = FDCEMU_CMD_NULL;				/* Motor stopped, this is the last state */
 		FdcCycles = 0;
+
 		break;
 	}
 	return FdcCycles;
@@ -2107,6 +2415,153 @@ static int FDC_UpdateRestoreCmd ( void )
 	return FdcCycles;
 }
 
+#ifdef DRIVESOUND
+int NT_DriveSound_SeekOn(int tr, int dr)
+{
+	/* NT: start the drive seek sound */
+
+	DWORD dwStatus;
+
+	///FILE* logfile;  ///logfile = fopen("d:\\temp\\drivesound\\log.txt", "a");
+	if (dr == tr) {
+		///fprintf(logfile, "seek %i, %i, not playing\n", tr, dr);
+		///fclose(logfile);
+		return -1;
+	}
+	if (abs(dr - tr) == 1) {
+		///fprintf(logfile, "seek %i, %i, step instead\n", tr, dr);
+		///fclose(logfile);
+		return NT_DriveSound_Step();
+	}
+	///fprintf(logfile, "seek %i, %i\n", tr, dr);
+	///fclose(logfile);
+	if (dr > tr)
+	{
+		if (Sound_Buffer[FDC.DriveSelSignal][SEEK_BACK])
+		{
+			Sound_Buffer[FDC.DriveSelSignal][SEEK_BACK]->lpVtbl->GetStatus(Sound_Buffer[FDC.DriveSelSignal][SEEK_BACK],
+				&dwStatus);
+
+			if (!(dwStatus & DSBSTATUS_PLAYING)) {
+				HRESULT Res = Sound_Buffer[FDC.DriveSelSignal][SEEK_BACK]->lpVtbl->Stop(Sound_Buffer[FDC.DriveSelSignal][SEEK_BACK]);
+			}
+		}
+
+		if (Sound_Buffer[FDC.DriveSelSignal][SEEK_FWD])
+		{
+			Sound_Buffer[FDC.DriveSelSignal][SEEK_FWD]->lpVtbl->GetStatus(Sound_Buffer[FDC.DriveSelSignal][SEEK_FWD],
+				&dwStatus);
+
+			if (!(dwStatus & DSBSTATUS_PLAYING)) {
+				HRESULT Res = Sound_Buffer[FDC.DriveSelSignal][SEEK_FWD]->lpVtbl->Play(Sound_Buffer[FDC.DriveSelSignal][SEEK_FWD],
+					0, 0, 0);
+
+				///logfile = fopen("d:\\temp\\drivesound\\log.txt", "a");
+				///fprintf(logfile, "seek fwd sample on 0x%08X\n", Res);
+				///fclose(logfile);
+			}
+		}
+	}
+	else
+	{
+		if (Sound_Buffer[FDC.DriveSelSignal][SEEK_FWD])
+		{
+			Sound_Buffer[FDC.DriveSelSignal][SEEK_FWD]->lpVtbl->GetStatus(Sound_Buffer[FDC.DriveSelSignal][SEEK_FWD],
+				&dwStatus);
+
+			if (!(dwStatus & DSBSTATUS_PLAYING)) {
+				HRESULT Res = Sound_Buffer[FDC.DriveSelSignal][SEEK_FWD]->lpVtbl->Stop(Sound_Buffer[FDC.DriveSelSignal][SEEK_FWD]);
+			}
+		}
+
+		if (Sound_Buffer[FDC.DriveSelSignal][SEEK_BACK])
+		{
+			Sound_Buffer[FDC.DriveSelSignal][SEEK_BACK]->lpVtbl->GetStatus(Sound_Buffer[FDC.DriveSelSignal][SEEK_BACK],
+				&dwStatus);
+
+			if (!(dwStatus & DSBSTATUS_PLAYING)) {
+				HRESULT Res = Sound_Buffer[FDC.DriveSelSignal][SEEK_BACK]->lpVtbl->Play(Sound_Buffer[FDC.DriveSelSignal][SEEK_BACK],
+					0, 0, 0);
+
+				///logfile = fopen("d:\\temp\\drivesound\\log.txt", "a");
+				///fprintf(logfile, "seek back sample on 0x%08X\n", Res);
+				///fclose(logfile);
+			}
+		}
+	}
+}
+
+int NT_DriveSound_SeekOff(void)
+{
+	DWORD dwStatus;
+
+	if (Sound_Buffer[FDC.DriveSelSignal][SEEK_BACK])
+	{
+		Sound_Buffer[FDC.DriveSelSignal][SEEK_BACK]->lpVtbl->GetStatus(Sound_Buffer[FDC.DriveSelSignal][SEEK_BACK],
+			&dwStatus);
+
+		if (!(dwStatus & DSBSTATUS_PLAYING)) {
+			HRESULT Res = Sound_Buffer[FDC.DriveSelSignal][SEEK_BACK]->lpVtbl->Stop(Sound_Buffer[FDC.DriveSelSignal][SEEK_BACK]);
+		}
+	}
+
+	if (Sound_Buffer[FDC.DriveSelSignal][SEEK_FWD])
+	{
+		Sound_Buffer[FDC.DriveSelSignal][SEEK_FWD]->lpVtbl->GetStatus(Sound_Buffer[FDC.DriveSelSignal][SEEK_FWD],
+			&dwStatus);
+
+		if (!(dwStatus & DSBSTATUS_PLAYING)) {
+			HRESULT Res = Sound_Buffer[FDC.DriveSelSignal][SEEK_FWD]->lpVtbl->Stop(Sound_Buffer[FDC.DriveSelSignal][SEEK_FWD]);
+		}
+	}
+}
+
+int NT_DriveSound_Step(void)
+{
+	/* NT: start the drive seek sound */
+
+	DWORD dwStatus;
+
+	///FILE* logfile;  ///logfile = fopen("d:\\temp\\drivesound\\log.txt", "a");
+	///fprintf(logfile, "step\n");
+	///fclose(logfile);
+
+	if (Sound_Buffer[FDC.DriveSelSignal][SEEK_BACK])
+	{
+		Sound_Buffer[FDC.DriveSelSignal][SEEK_BACK]->lpVtbl->GetStatus(Sound_Buffer[FDC.DriveSelSignal][SEEK_BACK],
+			&dwStatus);
+
+		if (dwStatus & DSBSTATUS_PLAYING) {
+			return 0;
+		}
+	}
+
+	if (Sound_Buffer[FDC.DriveSelSignal][SEEK_FWD])
+	{
+		Sound_Buffer[FDC.DriveSelSignal][SEEK_FWD]->lpVtbl->GetStatus(Sound_Buffer[FDC.DriveSelSignal][SEEK_FWD],
+			&dwStatus);
+
+		if (dwStatus & DSBSTATUS_PLAYING) {
+			return 0;
+		}
+	}
+
+	if (Sound_Buffer[FDC.DriveSelSignal][STEP])
+	{
+//		Sound_Buffer[FDC.DriveSelSignal][STEP]->lpVtbl->GetStatus(Sound_Buffer[FDC.DriveSelSignal][STEP],
+//			&dwStatus);
+
+//		if (!(dwStatus & DSBSTATUS_PLAYING)) {
+			HRESULT Res = Sound_Buffer[FDC.DriveSelSignal][STEP]->lpVtbl->Play(Sound_Buffer[FDC.DriveSelSignal][STEP],
+				0, 0, 0);
+
+//			///logfile = fopen("d:\\temp\\drivesound\\log.txt", "a");
+//			///fprintf(logfile, "seek fwd sample on 0x%08X\n", Res);
+//			///fclose(logfile);
+//		}
+	}
+}
+#endif
 
 /*-----------------------------------------------------------------------*/
 /**
@@ -2123,6 +2578,7 @@ static int FDC_UpdateSeekCmd ( void )
 	switch (FDC.CommandState)
 	{
 	 case FDCEMU_RUN_SEEK_TOTRACK:
+		NT_DriveSound_SeekOn(FDC.TR, FDC.DR);
 		if ( FDC_Set_MotorON ( FDC.CR ) )
 		{
 			FDC.CommandState = FDCEMU_RUN_SEEK_TOTRACK_SPIN_UP;
@@ -2149,6 +2605,8 @@ static int FDC_UpdateSeekCmd ( void )
 		{
 			FDC.CommandState = FDCEMU_RUN_SEEK_VERIFY;
 			FdcCycles = FDC_DELAY_CYCLE_COMMAND_IMMEDIATE;
+
+			NT_DriveSound_SeekOff();
 		}
 		else
 		{
@@ -2273,6 +2731,7 @@ static int FDC_UpdateStepCmd ( void )
 	switch (FDC.CommandState)
 	{
 	 case FDCEMU_RUN_STEP_ONCE:
+		 NT_DriveSound_Step();
 		if ( FDC_Set_MotorON ( FDC.CR ) )
 		{
 			FDC.CommandState = FDCEMU_RUN_STEP_ONCE_SPIN_UP;
@@ -3150,6 +3609,8 @@ static bool FDC_Set_MotorON ( Uint8 FDC_CR )
 		FDC_Update_STR ( FDC_STR_BIT_SPIN_UP , 0 );		/* Unset spin up bit */
 		FDC.IndexPulse_Counter = 0;				/* Reset counter to measure the spin up sequence */
 		SpinUp = true;
+
+		// TODO: drive spin-up sound - NT
 	}
 	else								/* No spin up : don't add delay to start the motor */
 	{
@@ -3170,6 +3631,26 @@ static bool FDC_Set_MotorON ( Uint8 FDC_CR )
 	else if ( FDC_DRIVES[ FDC.DriveSelSignal ].IndexPulse_Time == 0 )
 		FDC_IndexPulse_Init ( FDC.DriveSelSignal );		/* Index Pulse's position is random when motor starts */
 	
+#ifdef DRIVESOUND
+	/* NT: start the drive motor sound */
+	DWORD dwStatus;
+
+	if (Sound_Buffer[FDC.DriveSelSignal][MOTOR])
+	{
+		Sound_Buffer[FDC.DriveSelSignal][MOTOR]->lpVtbl->GetStatus(Sound_Buffer[FDC.DriveSelSignal][MOTOR],
+			&dwStatus);
+
+		if (!(dwStatus & DSBSTATUS_PLAYING)) {
+			HRESULT Res = Sound_Buffer[FDC.DriveSelSignal][MOTOR]->lpVtbl->Play(Sound_Buffer[FDC.DriveSelSignal][MOTOR],
+				0, 0, DSBPLAY_LOOPING);
+
+			///FILE* logfile;  ///logfile = fopen("d:\\temp\\drivesound\\log.txt", "ab");
+			///fprintf(logfile, "motor sample on 0x%08X\n", Res);
+			///fclose(logfile);
+		}
+	}
+#endif
+
 	return SpinUp;
 }
 

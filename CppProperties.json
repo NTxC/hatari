@@ -20,6 +20,14 @@
         "${workspaceRoot}\\libretro\\uae-cpu-pregen"
       ],
       "intelliSenseMode": "windows-clang-x64",
+      "defines": [
+        "WIN32",
+        "LSB_FIRST",
+        "ALIGN_DWORD",
+        "WIN32PORT",
+        "__LIBRETRO__",
+        "DRIVESOUND"
+      ],
       "environments": [
         {
           "MINGW_PREFIX": "D:/msys64/mingw64",
